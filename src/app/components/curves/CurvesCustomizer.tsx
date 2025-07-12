@@ -2,7 +2,6 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { v4 as uuidv4 } from 'uuid'; // Import uuid for unique IDs
-import { CurvesBuilderForm } from './CurvesBuilderForm';
 import CurvesVisualizer from './CurvesVisualizer';
 import { Button } from '@/components/ui/button';
 import { ProductDefinition, ProductConfiguration, Material, PartListItem } from '@/types'; // Added PartListItem
@@ -19,7 +18,7 @@ import { calculateNestingEfficiency, CURVE_EFFICIENCY_RATES } from '@/lib/pricin
 
 // Define Props Interface (Ensuring it exists)
 interface CurvesCustomizerProps {
-  onBack: () => void;
+  
 }
 
 // Pricing interface - all prices are GST-inclusive as per Shopify standard
@@ -180,6 +179,10 @@ const CurvesCustomizer: React.FC<CurvesCustomizerProps> = () => {
   // Removed currentConfig from dependencies to prevent re-fetching material when config changes to empty
   }, [error, product]);
 
+  const handleAddPart = () => {
+    // Placeholder function
+    console.log("Add to Parts List clicked");
+  };
 
   // Determine if the current configuration is incomplete for actual part calculation
   const isConfigIncomplete = !(
@@ -589,116 +592,6 @@ const CurvesCustomizer: React.FC<CurvesCustomizerProps> = () => {
     setCurrentPartQuantity(Math.max(1, newQuantity)); 
   }, []);
   
-  const handleAddPart = useCallback(() => {
-    const specRadiusNum = Number(currentConfig.specifiedRadius);
-    const widthNum = Number(currentConfig.width);
-    const angleNum = Number(currentConfig.angle);
-    const radiusTypeVal = currentConfig.radiusType as 'internal' | 'external';
-
-    // Enhanced validation before adding part
-    if (isConfigIncomplete || 
-        widthNum <= 0 || 
-        specRadiusNum <= 0 || 
-        angleNum <= 0 || 
-        angleNum > 360 ||
-        (radiusTypeVal === 'external' && specRadiusNum <= widthNum)) {
-        console.error("Cannot add part: Invalid configuration detected.");
-        return;
-    }
-    
-    // Validate split information
-    const numSplitsValue = splitInfo.isTooLarge ? splitInfo.numSplits : 1;
-    if (numSplitsValue <= 0 || isNaN(numSplitsValue)) {
-        console.error("Cannot add part: Invalid split information.");
-        return;
-    }
-
-    let singlePartAreaM2 = 0;
-    let itemIdealEfficiency = 0.3; // Default efficiency
-
-    try {
-      // FIXED: Always calculate the full part area first, then adjust for splits in pricing
-      const fullPartAreaMM2 = (angleNum / 360) * Math.PI * (Math.pow(actualOuterRadius, 2) - Math.pow(actualInnerRadius, 2));
-      
-      // Validate calculated area
-      if (isNaN(fullPartAreaMM2) || fullPartAreaMM2 <= 0) {
-        console.error("Cannot add part: Invalid area calculation.");
-        return;
-      }
-      
-      if (numSplitsValue <= 1) {
-        // Single part calculation - use full area
-        singlePartAreaM2 = fullPartAreaMM2 / 1000000;
-        itemIdealEfficiency = calculateNestingEfficiency(actualInnerRadius, widthNum, angleNum, CURVE_EFFICIENCY_RATES);
-      } else {
-        // Split part calculation - store area per split section 
-        const splitPartAngle = angleNum / numSplitsValue;
-        
-        // Validate split angle
-        if (splitPartAngle <= 0 || splitPartAngle > 360) {
-          console.error("Cannot add part: Invalid split angle calculation.");
-          return;
-        }
-        
-        singlePartAreaM2 = (fullPartAreaMM2 / numSplitsValue) / 1000000;
-        itemIdealEfficiency = calculateNestingEfficiency(actualInnerRadius, widthNum, splitPartAngle, CURVE_EFFICIENCY_RATES);
-      }
-
-      // Final validation of calculated values
-      if (isNaN(singlePartAreaM2) || singlePartAreaM2 <= 0) {
-        console.error("Cannot add part: Final area validation failed.");
-        return;
-      }
-      
-      if (isNaN(itemIdealEfficiency) || itemIdealEfficiency <= 0) {
-        console.warn("Calculated ideal efficiency is invalid, using default 0.3");
-        itemIdealEfficiency = 0.3;
-      }
-
-      // Clamp efficiency to reasonable bounds
-      itemIdealEfficiency = Math.max(0.05, Math.min(0.95, itemIdealEfficiency));
-
-      const newPart: PartListItem = {
-        id: uuidv4(),
-        partType: 'curve',
-        config: { ...currentConfig }, 
-        quantity: currentPartQuantity,
-        singlePartAreaM2: singlePartAreaM2,
-        numSplits: numSplitsValue,
-        itemIdealEfficiency: itemIdealEfficiency,
-        priceDetails: {
-          materialCost: 0,
-          manufactureCost: 0,
-          totalIncGST: 0,
-        },
-        turnaround: 1
-      };
-
-      setPartsList(prevList => [...prevList, newPart]);
-      
-      // Reset configurator to default state with FORMPLY
-      if (product) {
-        const defaultConfigForReset = getDefaultConfig();
-        product.parameters.forEach(param => {
-          if (!Object.prototype.hasOwnProperty.call(defaultConfigForReset, param.id) || defaultConfigForReset[param.id] === undefined) {
-            defaultConfigForReset[param.id] = param.defaultValue !== undefined ? param.defaultValue : '';
-          }
-        });
-        // Ensure material defaults to FORMPLY
-        defaultConfigForReset.material = 'form-17';
-        setCurrentConfig(defaultConfigForReset);
-      } else {
-        setCurrentConfig(getDefaultConfig());
-      }
-      setCurrentPartQuantity(1);
-
-    } catch (error) {
-      console.error("Error calculating part area:", error);
-      return;
-    }
-
-  }, [currentConfig, currentPartQuantity, splitInfo, product, isConfigIncomplete, actualInnerRadius, actualOuterRadius]);
-
   const handleDeletePart = useCallback((idToDelete: string) => {
       setPartsList(prevList => prevList.filter(part => part.id !== idToDelete));
       // Clear selection if the selected part is being deleted
@@ -926,16 +819,7 @@ const CurvesCustomizer: React.FC<CurvesCustomizerProps> = () => {
                 {isLoading && !product ? ( // Show loading in form area if product is still loading
                   <div>Loading form...</div>
                 ) : product ? ( // Only render form if product definition is available
-                  <CurvesBuilderForm
-                    product={product}
-                    initialConfig={currentConfig} 
-                    onConfigChange={handleConfigChange}
-                    onFieldFocusChange={handleFieldFocusChange}
-                    splitInfo={splitInfo} 
-                    setSplitLinesHovered={setSplitLinesHovered}
-                    quantity={currentPartQuantity}
-                    onQuantityChange={handleCurrentPartQuantityChange}
-                  />
+                  <div>Form content goes here</div>
                 ) : (
                    <div>Could not load product definition for the form.</div> // Fallback if product is null after load attempt
                 )}
